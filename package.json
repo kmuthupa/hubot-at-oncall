@@ -1,7 +1,7 @@
 {
   "name": "hubot-at-oncall",
   "description": "Listens for any mentions of @oncall, looks up the primary on call in PagerDuty, and mentions them to bring their attention to the issue.",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "author": "Chris Downie <cdownie@gmail.com>",
   "license": "MIT",
 
