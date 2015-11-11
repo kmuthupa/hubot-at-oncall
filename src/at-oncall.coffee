@@ -23,7 +23,7 @@
 #
 #   This script only works if PagerDuty has one escalation policy. If there's more than
 #   that, then it's not clear which escalation policy should be used to look up the current
-#   on-call. 
+#   on-call.
 #
 #   HUBOT_SLACK_TOKEN is implicitly used by hubot-slack-api.
 #
@@ -40,7 +40,7 @@ emailToSlackId = null
 
 module.exports = (robot) ->
   getSlackIdFromEmail = (email, cb) ->
-    if emailToSlackId == null && robot.slack !== undefined
+    if emailToSlackId == null && robot.slack?
       robot.slack.users.list {}, (err, json) ->
         if err
           console.log "Calling slack API errored: #{err}"
