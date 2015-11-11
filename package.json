@@ -4,13 +4,13 @@
   "version": "1.0.0",
   "author": "Chris Downie <cdownie@gmail.com>",
   "license": "MIT",
-  "keywords": "hubot, hubot-scripts, pagerduty, oncall",
+  "keywords": "hubot, hubot-scripts, pagerduty, oncall, usermind",
   "repository": {
     "type": "git",
-    "url": "git://github.com/hubot-scripts/hubot-at-oncall.git"
+    "url": "git://github.com/usermindinc/hubot-at-oncall.git"
   },
   "bugs": {
-    "url": "https://github.com/hubot-scripts/hubot-at-oncall/issues"
+    "url": "https://github.com/usermindinc/hubot-at-oncall/issues"
   },
   "dependencies": {},
   "peerDependencies": {
