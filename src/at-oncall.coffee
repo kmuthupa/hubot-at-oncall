@@ -36,34 +36,41 @@ pagerDutySubdomain     = process.env.HUBOT_PAGERDUTY_SUBDOMAIN
 pagerDutyBaseUrl       = "https://#{pagerDutySubdomain}.pagerduty.com/api/v1"
 
 # Emails assumed to be @usermind.com
-emailToSlackId = null
+emailToUsername = null
 
 module.exports = (robot) ->
-  getSlackIdFromEmail = (email, cb) ->
-    if emailToSlackId == null && robot.slack?
-      robot.slack.users.list {}, (err, json) ->
-        if err
-          console.log "Calling slack API errored: #{err}"
-          return null
-        unless json.ok
-          console.log "Calling slack API gave a not-OK response: #{json.error}"
-          return null
+  #
+  # Helper functions
+  #
+  getUserNameFromEmail = (email, cb) ->
+    if emailToUsername == null
+      # Look up the usernames in Slack, if supported.
+      if robot.slack?
+        robot.slack.users.list {}, (err, json) ->
+          if err
+            console.log "Calling slack API errored: #{err}"
+            return null
+          unless json.ok
+            console.log "Calling slack API gave a not-OK response: #{json.error}"
+            return null
 
-        userMap = {}
-        userMap[member.profile.email] = member.name for member in json.members
+          userMap = {}
+          userMap[member.profile.email] = member.name for member in json.members
 
-        # cache it
-        emailToSlackId = userMap
+          # cache it
+          emailToUsername = userMap
 
-        slackId = emailToSlackId[email]
-        unless slackId
-          slackId = null
-        cb slackId
+          slackId = emailToUsername[email]
+          unless slackId
+            slackId = null
+          cb slackId
+      else
+        cb null
     else
-      slackId = emailToSlackId[email]
-      unless slackId
-        slackId = null
-      cb slackId
+      userName = emailToUsername[email]
+      unless userName
+        userName = null
+      cb userName
 
   missingEnvironmentForApi = (msg) ->
     missingAnything = false
@@ -93,7 +100,9 @@ module.exports = (robot) ->
             json_body = null
         cb json_body
 
-  # Responses
+  #
+  # Supported commands
+  #
   robot.hear /@on-?call/i, (msg) ->
     pagerDutyGet msg, "/escalation_policies/on_call", {}, (json) ->
       unless json
@@ -106,12 +115,12 @@ module.exports = (robot) ->
         if person.level == 1
           primaryOnCall = person
 
-      slackName = getSlackIdFromEmail primaryOnCall.user.email, (slackName) ->
-        if slackName
-          msg.send "@#{slackName} ^^^^"
+      getUserNameFromEmail primaryOnCall.user.email, (userName) ->
+        if userName
+          msg.send "@#{userName} ^^^^"
         else
           msg.send "#{primaryOnCall.user.name} ^^^^"
 
   robot.respond /clear on-?call cache/, (msg) ->
-    emailToSlackId = null
+    emailToUsername = null
     msg.send "Cleared. I'll refetch on the next request."
