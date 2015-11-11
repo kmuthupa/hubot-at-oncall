@@ -3,32 +3,34 @@
 #
 # Dependencies:
 #   "githubot": "2.16.x"
-#   "hubot-slack-api": "2.2.x"
+#   "hubot-slack-api": "2.2.x" (Optional)
 #
 # Configuration:
-#   HUBOT_SLACK_TOKEN
 #   HUBOT_PAGERDUTY_API_KEY
 #   HUBOT_PAGERDUTY_SUBDOMAIN
+#   HUBOT_SLACK_TOKEN (Optional)
 #
 # Commands:
 #   @oncall - Mention the current on-call so they see what was just said.
 #   @on-call - Mention the current on-call so they see what was just said.
-#   hubot clear oncall cache - Remove the current cache of email to slack username.
+#   hubot clear oncall cache - Remove the current cache of email to username.
 #
 # Notes:
-#   This script is intended to work with Slack, since Slack has really good notification
-#   support whenever a user is mentioned by their Slack username. Without hubot-slack-api,
-#   or if we can't find the Slack username associated with the current on-call's email
-#   address, it will post the email associated with the current PagerDuty on-call.
+#   @oncall will respond with the current on-call's name as they've registered it with PagerDuty.
+#
+#   If you use slack, adding `hubot-slack-api` and a HUBOT_SLACK_TOKEN will change the @oncall response.
+#   Instead of responding with the name, it will respond with the Slack username. HUBOT_SLACK_TOKEN is
+#   implicitly used by hubot-slack-api.
 #
 #   This script only works if PagerDuty has one escalation policy. If there's more than
 #   that, then it's not clear which escalation policy should be used to look up the current
-#   on-call.
+#   on-call. If you've got a use case for this & an idea of how to choose which escalation policy
+#   to pull the on-call data from, please file an issue and let's discuss.
 #
-#   HUBOT_SLACK_TOKEN is implicitly used by hubot-slack-api.
 #
 # Author:
 #   Chris Downie <cdownie@gmail.com>
+#
 
 # Configuration
 pagerDutyApiKey        = process.env.HUBOT_PAGERDUTY_API_KEY
@@ -42,6 +44,8 @@ module.exports = (robot) ->
   #
   # Helper functions
   #
+
+  # Map an email to a username in the appropriate chat interface
   getUserNameFromEmail = (email, cb) ->
     if emailToUsername == null
       # Look up the usernames in Slack, if supported.
@@ -72,6 +76,7 @@ module.exports = (robot) ->
         userName = null
       cb userName
 
+  # Warn about any misconfigured environment variables.
   missingEnvironmentForApi = (msg) ->
     missingAnything = false
     unless pagerDutySubdomain?
@@ -82,6 +87,7 @@ module.exports = (robot) ->
       missingAnything |= true
     missingAnything
 
+  # Make GET requests to the pagerDuty API
   pagerDutyGet = (msg, url, query, cb) ->
     if missingEnvironmentForApi(msg)
       return
@@ -100,9 +106,12 @@ module.exports = (robot) ->
             json_body = null
         cb json_body
 
+
   #
   # Supported commands
   #
+
+  # Respond to @oncall with the on call's username (or name if username is unavailable)
   robot.hear /@on-?call/i, (msg) ->
     pagerDutyGet msg, "/escalation_policies/on_call", {}, (json) ->
       unless json
@@ -121,6 +130,7 @@ module.exports = (robot) ->
         else
           msg.send "#{primaryOnCall.user.name} ^^^^"
 
+  # Manually clear the cache of email to username
   robot.respond /clear on-?call cache/, (msg) ->
     emailToUsername = null
     msg.send "Cleared. I'll refetch on the next request."

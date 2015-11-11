@@ -18,9 +18,10 @@ Then add **hubot-at-oncall** to your `external-scripts.json`:
 ]
 ```
 
-## Sample Interaction
+## Sample Interactions
 
 ```
-user1>> hubot hello
-hubot>> hello!
+malcom>> There appears to be something wrong with the engine. @oncall
+hubot>> @kaylee ^^^^
+kaylee>> Not to fret Cap'n. I'm on it.
 ```
