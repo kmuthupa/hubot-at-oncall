@@ -116,19 +116,22 @@ module.exports = (robot) ->
     pagerDutyGet msg, "/escalation_policies/on_call", {}, (json) ->
       unless json
         msg.send "Can't determine who's on call right now. 😞"
-      unless json.escalation_policies.length == 1
-        manyOrFew = json.escalation_policies == 0 ? "few" : "many"
-        msg.send "Too #{manyOrFew} escalation policies. This script needs to be updated 🔜"
 
-      for person in json.escalation_policies[0].on_call
-        if person.level == 1
-          primaryOnCall = person
+      policiesWithServices = json.escalation_policies.filter (policy) ->
+        policy.services.length > 0
 
-      getUserNameFromEmail primaryOnCall.user.email, (userName) ->
-        if userName
-          msg.send "@#{userName} ^^^^"
-        else
-          msg.send "#{primaryOnCall.user.name} ^^^^"
+      primaries = policiesWithServices.reduce (primaries, policy) ->
+        primariesForThisPolicy = policy.on_call.filter (person) ->
+          person.level == 1
+        primaries.concat(primariesForThisPolicy)
+      , []
+
+      primaries.forEach (primaryOnCall) ->
+        getUserNameFromEmail primaryOnCall.user.email, (userName) ->
+          if userName
+            msg.send "@#{userName} ^^^^"
+          else
+            msg.send "#{primaryOnCall.user.name} ^^^^"
 
   # Manually clear the cache of email to username
   robot.respond /clear on-?call cache/, (msg) ->
