@@ -7,7 +7,7 @@
 #
 # Configuration:
 #   HUBOT_PAGERDUTY_API_KEY
-#   HUBOT_PAGERDUTY_SUBDOMAIN
+#   HUBOT_PAGERDUTY_ESCALATION_POLICIES (Optional)
 #   HUBOT_SLACK_TOKEN (Optional)
 #
 # Commands:
@@ -16,16 +16,18 @@
 #   hubot clear oncall cache - Remove the current cache of email to username.
 #
 # Notes:
-#   @oncall will respond with the current on-call's name as they've registered it with PagerDuty.
+#   @oncall will respond with the current on-call's name as they've registered
+#   it with PagerDuty.
 #
-#   If you use slack, adding `hubot-slack-api` and a HUBOT_SLACK_TOKEN will change the @oncall response.
-#   Instead of responding with the name, it will respond with the Slack username. HUBOT_SLACK_TOKEN is
-#   implicitly used by hubot-slack-api.
+#   If you use slack, adding `hubot-slack-api` and a HUBOT_SLACK_TOKEN will
+#   change the @oncall response. Instead of responding with the name, it will
+#   respond with the Slack username. HUBOT_SLACK_TOKEN is implicitly used by
+#   hubot-slack-api.
 #
-#   This script only works if PagerDuty has one escalation policy. If there's more than
-#   that, then it's not clear which escalation policy should be used to look up the current
-#   on-call. If you've got a use case for this & an idea of how to choose which escalation policy
-#   to pull the on-call data from, please file an issue and let's discuss.
+#   This script will use the PagerDuty escalation policy named Default. To
+#   customize that, provide the `HUBOT_PAGERDUTY_ESCALATION_POLICIES`
+#   environment variable. It should be a comma-separated list of ids of
+#   escalation policies to follow.
 #
 #
 # Author:
@@ -33,9 +35,9 @@
 #
 
 # Configuration
-pagerDutyApiKey        = process.env.HUBOT_PAGERDUTY_API_KEY
-pagerDutySubdomain     = process.env.HUBOT_PAGERDUTY_SUBDOMAIN
-pagerDutyBaseUrl       = "https://#{pagerDutySubdomain}.pagerduty.com/api/v1"
+pagerDutyApiKey             = process.env.HUBOT_PAGERDUTY_API_KEY
+pagerDutyEscalationPolicies = (process.env.HUBOT_PAGERDUTY_ESCALATION_POLICIES or "Default").split(",")
+pagerDutyBaseUrl            = "https://api.pagerduty.com"
 
 # Emails assumed to be @usermind.com
 emailToUsername = null
@@ -79,9 +81,6 @@ module.exports = (robot) ->
   # Warn about any misconfigured environment variables.
   missingEnvironmentForApi = (msg) ->
     missingAnything = false
-    unless pagerDutySubdomain?
-      msg.send "PagerDuty Subdomain is missing:  Ensure that HUBOT_PAGERDUTY_SUBDOMAIN is set."
-      missingAnything |= true
     unless pagerDutyApiKey?
       msg.send "PagerDuty API Key is missing:  Ensure that HUBOT_PAGERDUTY_API_KEY is set."
       missingAnything |= true
@@ -95,7 +94,7 @@ module.exports = (robot) ->
     auth = "Token token=#{pagerDutyApiKey}"
     msg.http(pagerDutyBaseUrl + url)
       .query(query)
-      .headers(Authorization: auth, Accept: 'application/json')
+      .headers(Authorization: auth, Accept: 'application/vnd.pagerduty+json;version=2')
       .get() (err, res, body) ->
         json_body = null
         switch res.statusCode
@@ -106,32 +105,34 @@ module.exports = (robot) ->
             json_body = null
         cb json_body
 
-
   #
   # Supported commands
   #
 
   # Respond to @oncall with the on call's username (or name if username is unavailable)
   robot.hear /@on-?call/i, (msg) ->
-    pagerDutyGet msg, "/escalation_policies/on_call", {}, (json) ->
+    pagerDutyGet msg, "/oncalls?include[]=users&include[]=escalation_policies", {}, (json) ->
       unless json
         msg.send "Can't determine who's on call right now. 😞"
 
-      policiesWithServices = json.escalation_policies.filter (policy) ->
-        policy.services.length > 0
+      primaries = json.oncalls
+        # Filter out policies that are higher than level 1.
+        .filter (oncall) ->
+          oncall.escalation_level <= 1
+        # Filter out policies that don't match the predefined set.
+        .filter (oncall) ->
+          oncall.escalation_policy.id in pagerDutyEscalationPolicies or
+            oncall.escalation_policy.name in pagerDutyEscalationPolicies
+        # Get just the active oncall user.
+        .map (oncall) -> oncall.user
 
-      primaries = policiesWithServices.reduce (primaries, policy) ->
-        primariesForThisPolicy = policy.on_call.filter (person) ->
-          person.level == 1
-        primaries.concat(primariesForThisPolicy)
-      , []
-
-      primaries.forEach (primaryOnCall) ->
-        getUserNameFromEmail primaryOnCall.user.email, (userName) ->
+      # Message each primary.
+      primaries.forEach (primary) ->
+        getUserNameFromEmail primary.email, (userName) ->
           if userName
             msg.send "@#{userName} ^^^^"
           else
-            msg.send "#{primaryOnCall.user.name} ^^^^"
+            msg.send "#{primary.name} ^^^^"
 
   # Manually clear the cache of email to username
   robot.respond /clear on-?call cache/, (msg) ->
