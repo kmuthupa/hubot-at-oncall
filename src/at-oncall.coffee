@@ -1,5 +1,6 @@
 # Description
-#   Bring attention to the current PagerDuty on-call whenever @oncall is mentioned.
+#   Bring attention to the current PagerDuty primary whenever @<team>-primary is mentioned.
+#   Bring attention to the current PagerDuty secondary whenever @<team>-secondary is mentioned.
 #
 # Dependencies:
 #   "githubot": "2.16.x"
@@ -7,45 +8,34 @@
 #
 # Configuration:
 #   HUBOT_PAGERDUTY_API_KEY
-#   HUBOT_PAGERDUTY_ESCALATION_POLICIES (Optional)
+#   HUBOT_PAGERDUTY_API (Optional)
 #   HUBOT_SLACK_TOKEN (Optional)
 #
 # Commands:
-#   @oncall - Mention the current on-call so they see what was just said.
-#   @on-call - Mention the current on-call so they see what was just said.
-#   hubot clear oncall cache - Remove the current cache of email to username.
-#
-# Notes:
-#   @oncall will respond with the current on-call's name as they've registered
-#   it with PagerDuty.
-#
-#   If you use slack, adding `hubot-slack-api` and a HUBOT_SLACK_TOKEN will
-#   change the @oncall response. Instead of responding with the name, it will
-#   respond with the Slack username. HUBOT_SLACK_TOKEN is implicitly used by
-#   hubot-slack-api.
-#
-#   This script will use the PagerDuty escalation policy named Default. To
-#   customize that, provide the `HUBOT_PAGERDUTY_ESCALATION_POLICIES`
-#   environment variable. It should be a comma-separated list of ids of
-#   escalation policies to follow.
+#   @<team>-primary - Mention the current on-call primary for the team so they see what was just said.
+#   @<team>-secondary - Mention the current on-call secondary for the team so they see what was just said.
+#   teams: dd
+#   oddjob clear oncall cache - Remove the current cache of email to username.
 #
 #
 # Author:
-#   Chris Downie <cdownie@gmail.com>
-#
+#   Karthik Muthupalaniappan
 
 # Configuration
 pagerDutyApiKey             = process.env.HUBOT_PAGERDUTY_API_KEY
-pagerDutyEscalationPolicies = (process.env.HUBOT_PAGERDUTY_ESCALATION_POLICIES or "Default").split(",")
-pagerDutyBaseUrl            = "https://api.pagerduty.com"
+pagerDutyBaseUrl            = process.env.HUBOT_PAGERDUTY_API || "https://api.pagerduty.com"
 
-# Emails assumed to be @usermind.com
 emailToUsername = null
+
+escalationPolicies = {
+  "dd" : "Data Distribution Escalation"
+}
 
 module.exports = (robot) ->
   #
   # Helper functions
   #
+
 
   # Map an email to a username in the appropriate chat interface
   getUserNameFromEmail = (email, cb) ->
@@ -109,30 +99,54 @@ module.exports = (robot) ->
   # Supported commands
   #
 
-  # Respond to @oncall with the on call's username (or name if username is unavailable)
-  robot.hear /@on-?call/i, (msg) ->
+  # Respond to @<team-name>-primary with the on call's username (or name if username is unavailable)
+  robot.hear /@(.+)-primary/i, (msg) ->
+    policy = msg.match[1]
     pagerDutyGet msg, "/oncalls?include[]=users&include[]=escalation_policies", {}, (json) ->
       unless json
-        msg.send "Can't determine who's on call right now. 😞"
+        msg.send "Can't determine who's primary right now. 😞"
 
+      console.log(escalationPolicies)
+      console.log(escalationPolicies[policy])
       primaries = json.oncalls
-        # Filter out policies that are higher than level 1.
         .filter (oncall) ->
           oncall.escalation_level <= 1
-        # Filter out policies that don't match the predefined set.
         .filter (oncall) ->
-          oncall.escalation_policy.id in pagerDutyEscalationPolicies or
-            oncall.escalation_policy.name in pagerDutyEscalationPolicies
-        # Get just the active oncall user.
+          oncall.escalation_policy.name == escalationPolicies[policy]
         .map (oncall) -> oncall.user
 
       # Message each primary.
+      console.log(primaries)
       primaries.forEach (primary) ->
         getUserNameFromEmail primary.email, (userName) ->
           if userName
             msg.send "@#{userName} ^^^^"
           else
             msg.send "#{primary.name} ^^^^"
+
+  # Respond to @<team-name>-secondary with the on call's username (or name if username is unavailable)
+   robot.hear /@(.+)-secondary/i, (msg) ->
+    policy = msg.match[1]
+    pagerDutyGet msg, "/oncalls?include[]=users&include[]=escalation_policies", {}, (json) ->
+      unless json
+        msg.send "Can't determine who's secondary right now. 😞"
+
+      secondaries = json.oncalls
+        .filter (oncall) ->
+          oncall.escalation_level <= 1
+        .filter (oncall) ->
+          oncall.escalation_policy.name == escalationPolicies[policy]
+        .map (oncall) -> oncall.user
+
+      # Message each secondary.
+      console.log(secondaries)
+      secondaries.forEach (secondary) ->
+        getUserNameFromEmail secondary.email, (userName) ->
+          if userName
+            msg.send "@#{userName} ^^^^"
+          else
+            msg.send "#{secondary.name} ^^^^"
+
 
   # Manually clear the cache of email to username
   robot.respond /clear on-?call cache/, (msg) ->
